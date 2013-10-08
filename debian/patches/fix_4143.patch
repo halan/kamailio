@@ -1,0 +1,74 @@
+--- a/modules/registrar/save.c
++++ b/modules/registrar/save.c
+@@ -652,6 +652,50 @@
+ 	}
+ #endif
+ 
++	// process expires first
++	_c = get_first_contact(_m);
++	for( ; _c ; _c = get_next_contact(_c) ) {
++		/* calculate expires */
++		calc_contact_expires(_m, _c->expires, &expires);
++
++		/* pack the contact info */
++		if ( (ci=pack_ci( 0, _c, expires, 0))==0 ) {
++			LM_ERR("failed to pack contact specific info\n");
++			goto error;
++		}
++
++		/* search for the contact*/
++		ret = ul.get_ucontact_by_instance( _r, &_c->uri, ci, &c);
++		if (ret==-1) {
++			LM_ERR("invalid cseq for aor <%.*s>\n",_r->aor.len,_r->aor.s);
++			rerrno = R_INV_CSEQ;
++			goto error;
++		} else if (ret==-2) {
++			if(expires!=0 && _mode)
++				break;
++			continue;
++		}
++
++		if ( ret <= 0 ) {
++			/* Contact found */
++			if (expires == 0) {
++				/* it's expired */
++				if (mem_only) {
++					c->flags |= FL_MEM;
++				} else {
++					c->flags &= ~FL_MEM;
++				}
++
++				if (ul.delete_ucontact(_r, c) < 0) {
++					rerrno = R_UL_DEL_C;
++					LM_ERR("failed to delete contact\n");
++					goto error;
++				}
++				rc = 3;
++			}
++		}
++	}
++
+ 	_c = get_first_contact(_m);
+ 	updated=0;
+ 	for( ; _c ; _c = get_next_contact(_c) ) {
+@@ -702,19 +746,7 @@
+ 		} else {
+ 			/* Contact found */
+ 			if (expires == 0) {
+-				/* it's expired */
+-				if (mem_only) {
+-					c->flags |= FL_MEM;
+-				} else {
+-					c->flags &= ~FL_MEM;
+-				}
+-
+-				if (ul.delete_ucontact(_r, c) < 0) {
+-					rerrno = R_UL_DEL_C;
+-					LM_ERR("failed to delete contact\n");
+-					goto error;
+-				}
+-				rc = 3;
++				LM_DBG("already processed\n");
+ 			} else {
+ 				/* do update */
+ 				if(_mode)
